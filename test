@@ -1,0 +1,15 @@
+PROC sample()
+  int lol = 0 @cref
+  C(a_ctype) myvar = C(expr)
+>>>
+  printf("i'm a c statement!\n");
+<<<
+}
+
+FUNC Main() int
+  IO.print("wow")
+}
+ 
+FUNC Example() int
+	# TODO
+}

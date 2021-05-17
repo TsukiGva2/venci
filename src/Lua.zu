@@ -1,0 +1,25 @@
+IMPORT.CHEADER "../lua/lua.h"
+IMPORT.CHEADER "../lua/lualib.h"
+IMPORT.CHEADER "../lua/lauxlib.h"
+
+MODULE Lua @items=public
+  PROC error(string err)
+    LOG.fatal(err)
+  }
+
+  PROC runScript(string name)
+>>> uses(getCstring)
+    lua_State *L = luaL_newstate();
+    luaL_openlibs(L);
+
+    if (luaL_dofile(L,ZgetCstring(%name%)) == LUA_OK) {
+      lua_pop(L, lua_gettop(L));
+    } else {
+      puts(lua_tostring(L, lua_gettop(L)));
+      %{error("error running script: " .. name)}%;
+    }
+
+    lua_close(L);
+<<<
+  }
+}

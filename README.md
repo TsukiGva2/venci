@@ -1,2 +1,5 @@
 # venci
-my text editor written in zimbu and C
+
+<!--- project's description -->
+
+# venci

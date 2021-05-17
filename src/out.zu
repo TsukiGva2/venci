@@ -1,0 +1,713 @@
+IMPORT.CHEADER <termios.h>
+IMPORT.CHEADER <unistd.h>
+IMPORT.CHEADER <ctype.h>
+IMPORT.CHEADER <errno.h>
+IMPORT.CHEADER <sys/ioctl.h>
+IMPORT.CHEADER "rawmode.h"
+IMPORT "Lua.zu"
+
+
+# NOTE: ESC -> 0x1b
+
+TYPE int Time_t
+
+string venci_v = "0.0.1"
+
+PROC die(string s)
+  LOG.fatal(s)
+}
+
+FUNC tcalls(string f, list<string> args = []) string
+  string res = "\x1b["
+  IF args.Size() >= 1
+    int c = 0
+    FOR i IN args
+      IF c == 0
+        res ..= i
+      ELSE
+        res ..= ";" .. i
+      }
+      c++
+    }
+  }
+  res ..= f
+  RETURN res
+}
+
+PROC tcall(string f, list<string> args = [])
+  string res = tcalls(f, args)
+  IO.stdout.write(res)
+}
+
+FUNC getCursorPosition(int &rows, int &cols) status
+  IF IO.stdout.write("\x1b[6n") != OK
+    RETURN FAIL
+  }
+
+  string s = ""
+  WHILE TRUE
+    byte c = IO.stdin.readByte()
+    IF c == IO.eof
+      BREAK
+    }
+    s ..= c.asString()
+    IF c == 'R'
+      BREAK
+    }
+  }
+
+  IF s[0] != '\x1b' || s[1] != '['
+    RETURN FAIL
+  }
+
+  string rw = ""
+  string cl = ""
+  int i     = 0
+  array<nat32> digits = "0123456789".toArray()
+  
+  FOR c IN s.slice(2)
+    int num = digits.find(c)
+    IF num != -1
+      rw ..= num
+    ELSEIF c == ';'
+      BREAK
+    }
+    i++
+  }
+
+  FOR c IN s.slice(i + rw.Size())
+    int num = digits.find(c)
+    IF num != -1
+      cl ..= num
+    ELSEIF c == 'R'
+      BREAK
+    }
+  }
+
+  rows = rw.toInt()
+  cols = cl.toInt()
+
+  RETURN OK
+}
+
+FUNC cx2rx(Erow r, nat cx, int ts) int
+  int rx = 0
+  nat c = 0
+  FOR j IN r.txt
+    IF c >= cx
+      BREAK
+    }
+    IF j == '\t'
+      rx += (ts - 1) - (rx % ts)
+    }
+    rx++
+    c++
+  }
+  RETURN rx
+}
+
+CLASS Erow
+  string $txt
+  string $orig
+  string $render
+
+  PROC $updateRow(int ts)
+    $render = ""
+    FOR i IN $txt
+      IF i == '\t'
+        FOR j IN 0 TO ts - 1
+          $render ..= ' '.asString()
+        }
+      ELSE
+        $render ..= i.asString()
+      }
+    }
+  }
+  
+  PROC $insertChar(nat pos, int ch)
+    int at = pos
+    IF $txt == NIL
+      $txt = ""
+    }
+    IF pos > $txt.Size()
+      at = $txt.Size()
+    }
+
+    string tmp = ""
+    IF at != 0
+      tmp = $txt.slice(0, at - 1)
+    }
+    tmp ..= ch.asString()
+    tmp ..= $txt.slice(at + 1)
+
+    $txt = tmp
+  }
+
+  PROC $shiftl(nat pos)
+    $txt = $txt.slice(0, pos) .. " " .. $txt.slice(pos + 1)
+  }
+  
+  PROC $preshiftl(nat pos)
+    string tmp = ""
+    IF pos != 0
+      tmp = $txt.slice(0, pos - 1)
+    }
+    $txt = tmp .. " " .. $txt.slice(pos)
+  }
+
+  PROC $back()
+    $txt = $orig
+  }
+  
+  NEW(string text)
+    $txt = text
+    $orig = text
+    $render = ""
+  }
+}
+
+CLASS EditorConfig
+  nat $cx, $cy
+  nat $rx
+  int $rows, $cols
+  byte $mode
+  list<Erow> $erows
+  int $n_erows
+  int $rowoff
+  int $coloff
+  int $ts
+  bool $expand
+  int $fmodified
+  string $filename
+  string $statusmsg
+  Time_t $statime
+  C(struct termios*) $orig_termios
+
+  PROC $setStatmsg(string s)
+    $statusmsg = s
+    $statime = TIME.current()
+  }
+  
+  FUNC $rowsToStr() string
+    string res = ""
+    FOR j IN $erows
+      res ..= j.txt .. "\n"
+    }
+    RETURN res
+  }
+
+  PROC $save()
+    IF $filename != NIL
+      string w = THIS.rowsToStr()
+
+      TRY
+        IO.File f = IO.fileWriter($filename, TRUE)
+      CATCH E.AccessDenied e
+        THIS.setStatmsg("(o.O?) | Error opening file: " .. e.toString(FALSE))
+      ELSE
+        IF f == NIL
+          THIS.setStatmsg("(T.T) | file: \($filename) doesn't exist!")
+        ELSE
+          f.write(w)
+          f.close()
+          FOR j IN 0 TO $n_erows - 1
+            $erows[j].orig = $erows[j].txt
+          }
+          THIS.setStatmsg("(\\^w^/) | \(w.Size()) bytes written")
+          $fmodified = 0
+        }
+      }
+    ELSE
+      THIS.setStatmsg("(@_@) | no filename!")
+    }
+  }
+
+  PROC $scroll()
+    $rx = 0
+    IF $cy < $n_erows
+      $rx = cx2rx($erows[$cy], $cx, $ts)
+    }
+
+    IF $cy < $rowoff
+      $rowoff = $cy
+    }
+
+    IF $cy >= $rowoff + $rows
+      $rowoff = $cy - $rows + 1
+    }
+
+    IF $cx < $coloff
+      $coloff = $cx
+    }
+
+    IF $cx >= $coloff + $cols
+      $coloff = $cx - $cols + 1
+    }
+  }
+
+  PROC $appendRow(string s)
+    Erow r = NEW(s)
+
+    r.updateRow($ts)
+
+    $erows.add(r)
+    $n_erows++
+  }
+  
+  PROC $insertChar(int c)
+    IF $cy == $n_erows
+      THIS.appendRow("")
+    }
+    $erows[$cy].insertChar($cx, c)
+    $erows[$cy].updateRow($ts)
+    $cx++
+    $fmodified++
+  }
+
+  PROC $shiftRowLeft()
+    $erows[$cy].shiftl($cx)
+    $erows[$cy].updateRow($ts)
+  }
+  
+  PROC $open(string fname)
+    TRY
+      IO.File f = IO.fileReader(fname)
+    CATCH E.AccessDenied e
+      THIS.setStatmsg("(o.O?) | Error opening file: " .. e.toString(FALSE))
+    ELSE
+      IF f == NIL
+        THIS.setStatmsg("(T.T) | file: \(fname) doesn't exist!")
+      ELSE
+        $filename = fname
+        list<string> lines = f.readAllLines()
+        FOR line IN lines
+          THIS.appendRow(line)
+        }
+        f.close()
+      }
+    }
+  }
+
+  PROC $moveCursor(int k)
+    int key
+
+    IF $mode == 'N'
+      dict<int, int> mapper = ['h': C(LEFT),
+                               'l': C(RIGHT),
+                               'j': C(DOWN),
+                               'k': C(UP)]
+      IF mapper.has(k)
+        key = mapper[k]
+      ELSE
+        key = k
+      }
+    ELSE
+      key = k
+    }
+
+    Erow r = ($cy >= $n_erows) ? NIL : $erows[$cy]
+
+    SWITCH key
+      CASE C(LEFT)
+        IF $cx > 0
+          $cx--
+        ELSEIF $cy > 0
+          $cy--
+          IF $cy < $n_erows
+            $cx = $erows[$cy].txt.Size()
+          }
+        }
+      CASE C(RIGHT)
+        IF r != NIL && $cx < r.txt.Size()
+          $cx++
+        }
+      CASE C(UP)
+        IF $cy != 0
+          $cy--
+        }
+      CASE C(DOWN)
+        IF $cy < $n_erows
+          $cy++
+        }
+      CASE '>'
+        IF r != NIL
+          THIS.shiftRowLeft()
+          $fmodified++
+        }
+      CASE '<'
+        IF r != NIL
+          r.preshiftl($cx)
+          r.updateRow($ts)
+          $fmodified++
+        }
+      CASE 'u'
+        IF r != NIL
+          r.back()
+          r.updateRow($ts)
+          IF $fmodified > 0 && r.txt != r.orig
+            $fmodified--
+          ELSE
+            THIS.setStatmsg("(~-~) | nothing to undo on current line.")
+          }
+        }
+      CASE 'D'
+        IF r != NIL
+          $erows.clear($cy)
+          $n_erows--
+          $fmodified++
+        }
+    }
+
+    Erow r2 = ($cy >= $n_erows) ? NIL : $erows[$cy]
+    int sz = r2 != NIL ? r2.txt.Size() : 0
+    IF $cx > sz
+      $cx = sz
+    }
+  }
+
+  FUNC $getWindowSize() status
+>>>
+    struct winsize ws;
+<<<
+    IF C(ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == -1 || ws.ws_col == 0)
+      IF IO.stdout.write("\x1b[999C\x1b[999B") != OK
+        RETURN FAIL
+      }
+      RETURN getCursorPosition(&$rows, &$cols)
+    ELSE
+      $rows = C(ws.ws_row) - 2
+      $cols = C(ws.ws_col)
+      RETURN OK
+    }
+  }
+
+  NEW()
+    $rowoff = 0
+    $coloff = 0
+    $erows = []
+    $mode = C('I')
+    $rows = 0
+    $ts = 2
+    $statusmsg = ""
+    $statime = 0
+    $cols = 0
+    $n_erows = 0
+    $fmodified = 0
+    $rx = 0
+    $expand = TRUE
+    $orig_termios = C(malloc(sizeof(struct termios)))
+
+    $cx = 0
+    $cy = 0
+  }
+}
+
+EditorConfig ec = NEW()
+
+# rawmode.h: void disableRawMode();
+>>>
+void disableRawMode() {
+  if(tcsetattr(STDIN_FILENO, TCSAFLUSH, %ec.orig_termios%) == -1)
+    %{die("tcsetattr error")}%;
+  free(%ec.orig_termios%);
+}
+<<<
+
+PROC enableRawMode()
+>>>
+  struct termios raw;
+  atexit(disableRawMode);
+
+  tcgetattr(STDIN_FILENO, %ec.orig_termios%);
+
+  raw = *%ec.orig_termios%;
+  raw.c_iflag &= ~(BRKINT | INPCK | ISTRIP | IXON | ICRNL);
+  raw.c_oflag &= ~(OPOST);
+  raw.c_cflag |= (CS8);
+  raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+
+  raw.c_cc[VMIN] = 0;
+  raw.c_cc[VTIME] = 1;
+  if(tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1)
+    %{die("tcsetattr error")}%;
+<<<
+}
+
+PROC clrscr()
+  tcall("J", ["2"])
+  gotoxy(1, 1)
+}
+
+PROC gotoxy(int x, int y)
+  tcall("H", [y.ToString(), x.ToString()])
+}
+
+FUNC gotoxy_s(int x, int y) string
+  RETURN tcalls("H", [y.ToString(), x.ToString()])
+}
+
+PROC processKeypress()
+  int c 
+>>>
+int*c = &%c%;
+<<<
+  c = readKey()
+  array<nat32> movement = "hjlk+".toArray()
+  IF C(*c == CTRL_KEY('q'))
+    clrscr()
+    EXIT 0
+  ELSE
+    SWITCH c
+      CASE '\r'
+        # TODO
+        BREAK
+
+      CASE C('\x1b')
+        ec.mode = ec.mode == 'N' ? 'I' : 'N' 
+
+      CASE C(HOME); ec.cx = 0
+      CASE C(END)
+        IF (ec.cy < ec.n_erows)
+          ec.cx = ec.erows[ec.cy].txt.Size()
+        }
+
+      CASE C(BACKSPACE); PROCEED
+      CASE C(CTRL_KEY('h')); PROCEED
+      CASE C(DEL)
+        # TODO
+        BREAK
+
+      CASE C(CTRL_KEY('s'))
+        ec.save()
+
+      CASE C(PAGE_UP); PROCEED
+      CASE C(PAGE_DOWN)
+        IF C(*c == PAGE_UP)
+          ec.cy = ec.rowoff
+        ELSEIF C(*c == PAGE_DOWN)
+          ec.cy = ec.rowoff + ec.rows - 1
+          IF ec.cy > ec.rows; ec.cy = ec.rows; }
+        }
+        FOR n IN ec.n_erows TO 0 STEP -1
+          int res = C(*c == PAGE_UP ? UP : DOWN)
+          ec.moveCursor(res)
+        }
+      
+      CASE C(UP); PROCEED
+      CASE C(LEFT); PROCEED
+      CASE C(DOWN); PROCEED
+      CASE C(RIGHT)
+        ec.moveCursor(c)
+
+      CASE '\t'
+        IF ec.expand
+          FOR i IN 0 TO ec.ts - 1
+            ec.insertChar(' ')
+          }
+        }
+
+      CASE C(CTRL_KEY('l'))
+        # this is the void, stuff that isnt 
+        # supposed to be handled should
+        # PROCEED to here
+        BREAK
+
+      DEFAULT
+        IF ec.mode == 'N'
+          ec.moveCursor(c)
+        ELSE
+          ec.insertChar(c)
+        }
+    }
+  }
+}
+
+FUNC drawRows() string
+  string ab = ""
+  FOR y IN 0 TO ec.rows - 1
+    int n = y + ec.rowoff
+    IF n >= ec.n_erows
+      IF ec.n_erows == 0 && y == ec.rows / 3
+        string w = "Venci test, version " .. venci_v
+        int padding = (ec.cols - w.Size()) / 2
+        IF padding != 0
+          ab ..= "~"
+          padding--
+        }
+        WHILE padding != 0
+          ab ..= " "
+          padding--
+        }
+        ab ..= w.slice(0, ec.cols)
+      ELSE
+        ab ..= "~"
+      }
+    ELSE
+      int sz = ec.erows[n].render.Size() - 1
+      int len = sz - ec.coloff
+      IF len < 0
+        len = 0
+      }
+      IF len >= ec.cols
+        len = ec.cols - 1
+      }
+      ab ..= ec.erows[n].render.slice(ec.coloff, ec.coloff + len)
+    }
+
+    ab ..= "\x1b[K"
+    ab ..= "\r\n"
+  }
+  RETURN ab
+}
+
+FUNC drawStatusBar() string
+  string ab = ""
+  
+  string barText = " \(ec.filename == NIL ? "[No Name]" : ec.filename.slice(0, 20))\(ec.fmodified > 0 ? "*" : "") - \(ec.n_erows) lines".slice(0, ec.cols - 1)
+  
+  string statText = "<\(ec.mode.asString())>\(ec.cy + 1)|\(ec.n_erows)"
+  int statlen = statText.Size()
+
+  string welcome = " welcome to venci (^_^)/ |"
+  IF barText.Size() + welcome.Size() < ec.cols - statlen
+    barText = welcome .. barText
+  }
+
+  ab ..= tcalls("m", ["7"])
+
+  ab ..= barText
+
+  FOR n IN barText.Size() TO ec.cols - 1
+    IF ec.cols - n == statlen
+      ab ..= statText
+      BREAK
+    }
+    ab ..= " "
+  }
+  ab ..= tcalls("m")
+  ab ..= "\r\n"
+  RETURN ab
+}
+
+FUNC drawMsgBar() string
+  string ab = ""
+  ab ..= tcalls("K")
+  int msglen = ec.statusmsg.Size()
+  IF msglen > 0 && TIME.current() - ec.statime < 5000
+    ab ..= ec.statusmsg.slice(0, ec.cols)
+  }
+  RETURN ab
+}
+
+PROC refreshScreen()
+  ec.scroll()
+
+  string ab = ""
+
+  ab ..= tcalls("l", ["?25"])
+  ab ..= gotoxy_s(1, 1)
+  
+  ab ..= drawRows()
+  ab ..= drawStatusBar()
+  ab ..= drawMsgBar()
+  
+  ab ..= gotoxy_s((ec.rx - ec.coloff) + 1, (ec.cy - ec.rowoff) + 1)
+  ab ..= tcalls("h", ["?25"])
+
+>>> uses(getCstring)
+  write(STDOUT_FILENO, ZgetCstring(%ab%), %ab.Size()%);
+<<<
+}
+
+FUNC readKey() int
+  int nread 
+>>>
+int*nread = &%nread%;
+<<<
+  byte c    
+>>>
+char*c = &%c%;
+<<<
+  int res   
+>>>
+int*res = &%res%;
+<<<
+  WHILE C((*nread = read(STDIN_FILENO, c, 1)) != 1)
+    IF C(*nread == -1 && errno != EAGAIN)
+      die("read error")
+    }
+  }
+
+  IF C(*c == '\x1b')
+>>>
+    char seq[3];
+<<<
+    IF C(read(STDIN_FILENO, &seq[0], 1) != 1)
+      RETURN C('\x1b') # need to use C('\x1b')
+                       # because zimbu char literals
+                       # are kinda broken
+    }
+    IF C(read(STDIN_FILENO, &seq[1], 1) != 1)
+      RETURN C('\x1b')
+    }
+
+    IF C(seq[0] == '[')
+      IF C(seq[1] >= '0' && seq[1] <= '9')
+        IF C(read(STDIN_FILENO, &seq[2], 1) != 1)
+          RETURN C('\x1b')
+        }
+        IF C(seq[2] == '~')
+          byte seq1 = C(seq[1])
+          SWITCH seq1.<int>
+            CASE C('1'); RETURN C(HOME)
+            CASE C('3'); RETURN C(DEL)
+            CASE C('4'); RETURN C(END)
+            CASE C('5'); RETURN C(PAGE_UP)
+            CASE C('6'); RETURN C(PAGE_DOWN)
+            CASE C('7'); RETURN C(HOME)
+            CASE C('8'); RETURN C(END)
+          }
+        }
+      ELSE
+        byte seq1 = C(seq[1])
+        SWITCH seq1.<int>
+          CASE 'A'; RETURN C(UP)
+          CASE 'B'; RETURN C(DOWN)
+          CASE 'C'; RETURN C(RIGHT)
+          CASE 'D'; RETURN C(LEFT)
+          CASE 'H'; RETURN C(HOME)
+          CASE 'F'; RETURN C(END)
+        }
+      }
+    ELSEIF C(seq[0] == 'O')
+      byte seq1 = C(seq[1])
+      SWITCH seq1.<int>
+        CASE 'H'; RETURN C(HOME)
+        CASE 'F'; RETURN C(END)
+      }
+    }
+
+    RETURN C('\x1b')
+  ELSE
+    RETURN c
+  }
+}
+
+FUNC Main() int
+  enableRawMode()
+  IF ec.getWindowSize() != OK
+    die("error getting window size")
+  }
+  IF ARG.rawSize() > 0
+    ec.open(ARG.getRawList()[0])
+  }
+
+  ec.setStatmsg("info: press Ctrl-Q to quit venci, press Ctrl-S to save")
+
+  WHILE TRUE
+    refreshScreen()
+    processKeypress()
+  }
+ 
+  RETURN 0
+}
