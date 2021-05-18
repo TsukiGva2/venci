@@ -241,8 +241,12 @@ CLASS EditorConfig
         }
       }
     ELSE
-      $filename = prompt("(@_@)?? | Save as: ")
-      THIS.save()
+      $filename = prompt("(o_o)? | Save as: ")
+      IF $filename == NIL
+        THIS.setStatmsg("(@_@) | so, no saving? Ok that's fine i guess")
+      ELSE
+        THIS.save()
+      }
     }
   }
 
@@ -534,6 +538,9 @@ int*c = &%c%;
       CASE '\r'
         ec.insertNL()
 
+      CASE C(CTRL_KEY('c'))
+        ec.setStatmsg("(*_*) | unlike vim, there's actually a NORMAL way to exit, try CTRL-Q")
+
       CASE C('\x1b')
         ec.mode = ec.mode == 'N' ? 'I' : 'N' 
 
@@ -701,6 +708,19 @@ FUNC prompt(string msg) string
 int*c = &%c%;
 <<<
     c = readKey()
+
+    IF C(*c == DEL || *c == CTRL_KEY('h') || *c == BACKSPACE)
+      IF buf.Size() > 1
+        buf = buf.slice(0, buf.Size() - 2)
+      ELSE
+        buf = ""
+      }
+    }
+
+    IF C(*c == '\x1b')
+      ec.setStatmsg("")
+      RETURN NIL
+    }
 
     IF C(*c == '\r')
       IF buf.Size() > 0
