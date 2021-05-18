@@ -197,6 +197,7 @@ CLASS EditorConfig
   list<Erow> $erows
   int $n_erows
   int $rowoff
+  string $copy
   int $coloff
   int $ts
   bool $expand
@@ -209,6 +210,13 @@ CLASS EditorConfig
   PROC $setStatmsg(string s, string b = "")
     $statusmsg = s .. b
     $statime = TIME.current()
+  }
+
+  PROC $find()
+    string query = prompt("(=_=) | -ESC to cancel- Find text: ")
+    IF query == NIL
+      THIS.setStatmsg("(-_^) | didn't find string NULL, lol jk, i know you canceled the thing")
+    }
   }
   
   FUNC $rowsToStr() string
@@ -290,7 +298,7 @@ CLASS EditorConfig
   }
 
   PROC $insertNL()
-    IF $cx == 0 && $cy == 0
+    IF $cx == 0 && $cy == 0 && $n_erows == 0
       THIS.insertRow("", $cy.<int>)
     ELSE
       Erow r = $erows[$cy]
@@ -425,6 +433,65 @@ CLASS EditorConfig
           $n_erows--
           $fmodified++
         }
+      CASE '['
+        IF r != NIL
+          $copy = r.txt
+          THIS.setStatmsg("(^.^) | line copied")
+        }
+      CASE ']'
+        IF $copy != NIL
+          FOR line IN $copy.split("\n")
+            THIS.insertRow(line, $cy.<int>)
+            $cy++
+          }
+        }
+      CASE '{'
+        IF $copy != NIL
+          $copy ..= "\n" .. r.txt
+          IF $copy.Size() > 250
+            THIS.setStatmsg("/(OoO)\\ | sorry, copy buffer is too big.")
+            $copy = $copy.slice(0, 250)
+          ELSE
+            THIS.setStatmsg("('V') | line appended to copy buffer")
+          }
+        ELSE
+          $copy = r.txt
+          THIS.setStatmsg("(^.^) | line copied")
+        }
+      CASE 'J'
+        string times = prompt(">>.>> | -ESC to cancel- how many lines to advance: ")
+        
+        IF times == NIL
+          THIS.setStatmsg("(._.) | this is boring, i want to run")
+          BREAK
+        }
+        
+        FOR i IN 0 TO times.toInt(20)
+          THIS.moveCursor(C(DOWN).<int>)
+        }
+      CASE 'K'
+        string times = prompt("<<.<< | -ESC to cancel- how many lines to go back: ")
+        
+        IF times == NIL
+          THIS.setStatmsg("('-') | this is boring, i want to run")
+          BREAK
+        }
+        
+        FOR i IN 0 TO times.toInt(20)
+          THIS.moveCursor(C(UP).<int>)
+        }
+      CASE 'p'
+        string t = prompt("(Owo) | \(TIME.current() % 5 == 0 ? "<!--i regret adding this ascii face-->" : "-ESC to cancel-") String to insert: ")
+        IF t == NIL
+          THIS.setStatmsg("(.o.) | why tho? this command is so cool!")
+          BREAK
+        }
+        FOR i IN 0 TO t.Size() - 1
+          r.preshiftl($cx)
+        }
+        FOR c IN t
+          THIS.insertChar(c)
+        }
     }
 
     Erow r2 = ($cy >= $n_erows) ? NIL : $erows[$cy]
@@ -464,6 +531,7 @@ CLASS EditorConfig
     $fmodified = 0
     $rx = 0
     $expand = TRUE
+    $copy = NIL
     $orig_termios = C(malloc(sizeof(struct termios)))
 
     $cx = 0
@@ -798,11 +866,12 @@ FUNC Main() int
   IF ec.getWindowSize() != OK
     die("error getting window size")
   }
+
+  ec.setStatmsg("info: press Ctrl-Q to quit venci, press Ctrl-S to save")
+
   IF ARG.rawSize() > 0
     ec.open(ARG.getRawList()[0])
   }
-
-  ec.setStatmsg("info: press Ctrl-Q to quit venci, press Ctrl-S to save")
 
   WHILE TRUE
     refreshScreen()
