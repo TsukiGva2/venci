@@ -11,5 +11,9 @@ FUNC Main() int
 }
  
 FUNC Example() int
-	# TODO
+  # TODO
+}
+
+FUNC Example() int
+  # expand tabs test
 }

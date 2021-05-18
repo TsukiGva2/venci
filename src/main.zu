@@ -110,12 +110,13 @@ CLASS Erow
   string $txt
   string $orig
   string $render
+  int $ts
 
-  PROC $updateRow(int ts)
+  PROC $updateRow()
     $render = ""
     FOR i IN $txt
       IF i == '\t'
-        FOR j IN 0 TO ts - 1
+        FOR j IN 0 TO $ts - 1
           $render ..= ' '.asString()
         }
       ELSE
@@ -141,10 +142,12 @@ CLASS Erow
     tmp ..= $txt.slice(at + 1)
 
     $txt = tmp
+    THIS.updateRow()
   }
 
   PROC $shiftl(nat pos)
     $txt = $txt.slice(0, pos) .. " " .. $txt.slice(pos + 1)
+    THIS.updateRow()
   }
   
   PROC $preshiftl(nat pos)
@@ -153,14 +156,34 @@ CLASS Erow
       tmp = $txt.slice(0, pos - 1)
     }
     $txt = tmp .. " " .. $txt.slice(pos)
+    THIS.updateRow()
   }
 
   PROC $back()
     $txt = $orig
+    THIS.updateRow()
+  }
+
+  PROC $delChar(int pos)
+    IF pos > 0 || pos < $txt.Size()
+      string tmp = ""
+      IF pos > 0
+        tmp = $txt.slice(0, pos - 1)
+      }
+      tmp ..= $txt.slice(pos + 1)
+      $txt = tmp
+    }
+    THIS.updateRow()
   }
   
-  NEW(string text)
+  PROC $appendStr(string s)
+    $txt ..= s
+    THIS.updateRow()
+  }
+
+  NEW(string text, int ts)
     $txt = text
+    $ts = ts
     $orig = text
     $render = ""
   }
@@ -245,30 +268,71 @@ CLASS EditorConfig
     }
   }
 
-  PROC $appendRow(string s)
-    Erow r = NEW(s)
+  PROC $insertRow(string s, int at = $n_erows)
+    IF (at >= 0 && at <= $n_erows)
+      Erow r = NEW(s, $ts)
 
-    r.updateRow($ts)
+      r.updateRow()
 
-    $erows.add(r)
-    $n_erows++
+      IF at == $n_erows
+        $erows.add(r)
+      ELSE
+        $erows.insert(r, at + 1)
+      }
+      $n_erows++
+      $fmodified++
+    }
+  }
+
+  PROC $insertNL()
+    IF $cx == 0 && $cy == 0
+      THIS.insertRow("", $cy.<int>)
+    ELSE
+      Erow r = $erows[$cy]
+      THIS.insertRow(r.txt.slice($cx), $cy.<int>)
+      IF $cx > 0
+        r.txt = r.txt.slice(0, $cx - 1)
+      ELSE
+        r.txt = ""
+      }
+      r.updateRow()
+    }
+    $cy++
+    $cx = 0
   }
   
   PROC $insertChar(int c)
     IF $cy == $n_erows
-      THIS.appendRow("")
+      THIS.insertRow("")
+      $fmodified--
     }
     $erows[$cy].insertChar($cx, c)
-    $erows[$cy].updateRow($ts)
     $cx++
     $fmodified++
   }
 
   PROC $shiftRowLeft()
     $erows[$cy].shiftl($cx)
-    $erows[$cy].updateRow($ts)
   }
   
+  PROC $delChar()
+    IF $cy != $n_erows
+      Erow r = $erows[$cy]
+      IF $cx > 0
+        r.delChar($cx - 1)
+        $cx--
+      ELSEIF $cy > 0
+        $cx = $erows[$cy - 1].txt.Size()
+        $erows[$cy - 1].appendStr(r.txt)
+
+        $erows.clear($cy)
+        $n_erows--
+
+        $cy--
+      }
+    }
+  }
+
   PROC $open(string fname)
     TRY
       IO.File f = IO.fileReader(fname)
@@ -281,8 +345,9 @@ CLASS EditorConfig
         $filename = fname
         list<string> lines = f.readAllLines()
         FOR line IN lines
-          THIS.appendRow(line)
+          THIS.insertRow(line)
         }
+        $fmodified = 0
         f.close()
       }
     }
@@ -326,7 +391,7 @@ CLASS EditorConfig
           $cy--
         }
       CASE C(DOWN)
-        IF $cy < $n_erows
+        IF $n_erows != 0 && $cy < $n_erows - 1
           $cy++
         }
       CASE '>'
@@ -337,17 +402,16 @@ CLASS EditorConfig
       CASE '<'
         IF r != NIL
           r.preshiftl($cx)
-          r.updateRow($ts)
           $fmodified++
         }
       CASE 'u'
         IF r != NIL
-          r.back()
-          r.updateRow($ts)
-          IF $fmodified > 0 && r.txt != r.orig
+          IF r.txt != r.orig
+            r.back()
             $fmodified--
+            THIS.setStatmsg("(-_O) | undid actions on that line")
           ELSE
-            THIS.setStatmsg("(~-~) | nothing to undo on current line.")
+            THIS.setStatmsg("(-_-) | nothing to undo on current line.")
           }
         }
       CASE 'D'
@@ -447,17 +511,24 @@ FUNC gotoxy_s(int x, int y) string
 }
 
 PROC processKeypress()
+  STATIC int didquit = 1
   int c @cref
   c = readKey()
-  array<nat32> movement = "hjlk+".toArray()
   IF C(*c == CTRL_KEY('q'))
-    clrscr()
-    EXIT 0
+    IF ec.fmodified > 0 && didquit > 0
+      ec.setStatmsg("WAIT! (O__O!) | you have unsaved changes! press CTRL-S to save or try again to quit anyway")
+      didquit--
+    ELSE
+      clrscr()
+      EXIT 0
+    }
   ELSE
+    array<nat32> movement = "hjlk+".toArray()
+    didquit = 1
+
     SWITCH c
       CASE '\r'
-        # TODO
-        BREAK
+        ec.insertNL()
 
       CASE C('\x1b')
         ec.mode = ec.mode == 'N' ? 'I' : 'N' 
@@ -471,8 +542,7 @@ PROC processKeypress()
       CASE C(BACKSPACE); PROCEED
       CASE C(CTRL_KEY('h')); PROCEED
       CASE C(DEL)
-        # TODO
-        BREAK
+        ec.delChar()
 
       CASE C(CTRL_KEY('s'))
         ec.save()
@@ -562,7 +632,7 @@ FUNC drawStatusBar() string
   
   string barText = " \(ec.filename == NIL ? "[No Name]" : ec.filename.slice(0, 20))\(ec.fmodified > 0 ? "*" : "") - \(ec.n_erows) lines".slice(0, ec.cols - 1)
   
-  string statText = "<\(ec.mode.asString())>\(ec.cy + 1)|\(ec.n_erows)"
+  string statText = "<\(ec.mode.asString())> LINE:\(ec.cy + 1)/\(ec.n_erows + 1) | COLUM:\(ec.cx + 1)"
   int statlen = statText.Size()
 
   string welcome = " welcome to venci (^_^)/ |"
@@ -591,7 +661,7 @@ FUNC drawMsgBar() string
   ab ..= tcalls("K")
   int msglen = ec.statusmsg.Size()
   IF msglen > 0 && TIME.current() - ec.statime < 5000
-    ab ..= ec.statusmsg.slice(0, ec.cols)
+    ab ..= ec.statusmsg
   }
   RETURN ab
 }
