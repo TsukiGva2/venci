@@ -206,8 +206,8 @@ CLASS EditorConfig
   Time_t $statime
   C(struct termios*) $orig_termios
 
-  PROC $setStatmsg(string s)
-    $statusmsg = s
+  PROC $setStatmsg(string s, string b = "")
+    $statusmsg = s .. b
     $statime = TIME.current()
   }
   
@@ -241,7 +241,8 @@ CLASS EditorConfig
         }
       }
     ELSE
-      THIS.setStatmsg("(@_@) | no filename!")
+      $filename = prompt("(@_@)?? | Save as: ")
+      THIS.save()
     }
   }
 
@@ -684,6 +685,27 @@ PROC refreshScreen()
 >>> uses(getCstring)
   write(STDOUT_FILENO, ZgetCstring(%ab%), %ab.Size()%);
 <<<
+}
+
+FUNC prompt(string msg) string
+  string buf = ""
+  WHILE TRUE
+    ec.setStatmsg(msg, buf)
+    refreshScreen()
+
+    int c @cref
+    c = readKey()
+
+    IF C(*c == '\r')
+      IF buf.Size() > 0
+        ec.setStatmsg("")
+        BREAK
+      }
+    ELSEIF C(!iscntrl(*c) && *c < 128)
+      buf ..= c.asString()
+    }
+  }
+  RETURN buf
 }
 
 FUNC readKey() int
