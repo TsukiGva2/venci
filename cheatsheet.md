@@ -36,5 +36,5 @@
 - Delete       works, but does the same as Backspace
 - Space
 - Arrow keys
-- HOME, END    SHOULD work
+- HOME, END    ~~SHOULD~~ work
 - PAGE UP/DOWN go to beginning/end of file
