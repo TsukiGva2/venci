@@ -175,6 +175,22 @@ CLASS Erow
     }
     THIS.updateRow()
   }
+
+  FUNC $rx2cx(int rx) int
+    int crx = 0
+    int cx = 0
+    FOR USE cx IN 0 TO $txt.Size()
+      IF $txt[cx] == '\t'
+        crx += ($ts - 1) - (crx % $ts)
+      }
+      crx++
+
+      IF crx > rx
+        RETURN cx
+      }
+    }
+    RETURN cx
+  }
   
   PROC $appendStr(string s)
     $txt ..= s
@@ -213,10 +229,7 @@ CLASS EditorConfig
   }
 
   PROC $find()
-    string query = prompt("(=_=) | -ESC to cancel- Find text: ")
-    IF query == NIL
-      THIS.setStatmsg("(-_^) | didn't find string NULL, lol jk, i know you canceled the thing")
-    }
+    string query = prompt("(=_=) | -ESC to cancel- Find text: ", findCb)
   }
   
   FUNC $rowsToStr() string
@@ -366,6 +379,11 @@ CLASS EditorConfig
     }
   }
 
+  PROC $close()
+    THIS.reset()
+    THIS.setStatmsg("(v.v) | file closed")
+  }
+
   PROC $moveCursor(int k)
     int key
 
@@ -420,8 +438,12 @@ CLASS EditorConfig
       CASE 'u'
         IF r != NIL
           IF r.txt != r.orig
+            FOR c IN r.txt
+              IF r.orig.find(c) == -1
+                $fmodified--
+              }
+            }
             r.back()
-            $fmodified--
             THIS.setStatmsg("(-_O) | undid actions on that line")
           ELSE
             THIS.setStatmsg("(-_-) | nothing to undo on current line.")
@@ -517,29 +539,54 @@ CLASS EditorConfig
     }
   }
 
-  NEW()
+  PROC $reset()
     $rowoff = 0
     $coloff = 0
     $erows = []
     $mode = C('I')
-    $rows = 0
     $ts = 2
     $statusmsg = ""
     $statime = 0
-    $cols = 0
     $n_erows = 0
     $fmodified = 0
     $rx = 0
     $expand = TRUE
     $copy = NIL
-    $orig_termios = C(malloc(sizeof(struct termios)))
-
     $cx = 0
     $cy = 0
+  }
+
+  NEW()
+    THIS.reset()
+    $rows = 0
+    $cols = 0
+    $orig_termios = C(malloc(sizeof(struct termios)))
   }
 }
 
 EditorConfig ec = NEW()
+
+PROC findCb(string query, int k)
+  IF k == '\x1b'
+    ec.setStatmsg("('.') | i was trying to find something, but you just canceled the thing.")
+    RETURN
+  }
+  
+  FOR i IN 0 TO ec.n_erows - 1
+    Erow r = ec.erows[i]
+    int match = r.render.find(query)
+    
+    IF match != -1
+      ec.cy = i
+      ec.cx = r.rx2cx(match)
+      ec.rowoff = ec.n_erows
+      ec.setStatmsg("(^O^) | Yay! i found it!")
+      BREAK
+    ELSEIF i == ec.n_erows - 1
+      ec.setStatmsg("(^_-) | didn't find string \(query)")
+    }
+  }
+}
 
 # rawmode.h: void disableRawMode();
 >>>
@@ -600,8 +647,26 @@ PROC processKeypress()
     didquit = 1
 
     SWITCH c
+      CASE C(CTRL_KEY('w'))
+        ec.close()
+
       CASE '\r'
         ec.insertNL()
+
+      CASE C(CTRL_KEY('f'))
+        ec.find()
+
+      CASE C(CTRL_KEY('g'))
+        string to = prompt("(o_O) | -ESC to cancel- Goto line: ")
+        IF to == NIL
+          ec.setStatmsg("(~____~) | nooooo, i want to teleport!")
+        }
+        int pos = to.toInt(1)
+        IF pos <= ec.n_erows
+          ec.cy = pos
+        ELSE
+          ec.setStatmsg("(X-x) | man... you cant go to that line, it's \(pos > ec.n_erows + 40 ? "waayyy" : "like...") outside of the file")
+        }
 
       CASE C(CTRL_KEY('c'))
         ec.setStatmsg("(*_*) | unlike vim, there's actually a NORMAL way to exit, try CTRL-Q")
@@ -743,6 +808,8 @@ FUNC drawMsgBar() string
 }
 
 PROC refreshScreen()
+  ec.getWindowSize()
+  
   ec.scroll()
 
   string ab = ""
@@ -762,7 +829,7 @@ PROC refreshScreen()
 <<<
 }
 
-FUNC prompt(string msg) string
+FUNC prompt(string msg, proc<string, int> fn = NIL) string
   string buf = ""
   WHILE TRUE
     ec.setStatmsg(msg, buf)
@@ -781,16 +848,26 @@ FUNC prompt(string msg) string
 
     IF C(*c == '\x1b')
       ec.setStatmsg("")
+      IF fn != NIL
+        fn(buf, c)
+      }
       RETURN NIL
     }
 
     IF C(*c == '\r')
       IF buf.Size() > 0
         ec.setStatmsg("")
+        IF fn != NIL
+          fn(buf, c)
+        }
         BREAK
       }
     ELSEIF C(!iscntrl(*c) && *c < 128)
       buf ..= c.asString()
+    }
+
+    IF fn != NIL
+      fn(buf, c)
     }
   }
   RETURN buf
