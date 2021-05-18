@@ -12,7 +12,7 @@
 - hjkl move around
 
 - <    insert a space before the cursor
-- >    insert a space after the cursor
+- \>    insert a space after the cursor
 
 - J    move downwards X lines
 - K    move upwards X lines
