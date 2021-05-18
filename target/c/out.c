@@ -1054,10 +1054,13 @@ Zs3 YY = {"\0012\000"};
 void YNEj(Ti Ax, Ti Ay); /* gotoxy */
 Zs3 Yja = {"\001H\000"};
 Tc *YcnF(Ti Ax, Ti Ay); /* gotoxy_s */
+void YyP1(); /* warnUnsaved */
+Zs92 Yeix = {"\132WAIT! (O__O!) | you have unsaved changes, press CTRL-S to save or try again to quit anyway\000"};
 void YLzL(); /* processKeypress */
 Ti Y1kq = 1 /* YLzL.didquit */;
-Zs92 Y_b5 = {"\132WAIT! (O__O!) | you have unsaved changes! press CTRL-S to save or try again to quit anyway\000"};
 Zs12 Ya_Da = {"\012src/out.zu\000"};
+Zs43 Yq1o = {"\051/>.</ | -ESC to cancel- type a filename: \000"};
+Zs36 Y38M = {"\042@.@ | ok, i get it, no file for me\000"};
 Zs7 Yp3l = {"\005hjlk+\000"};
 Zs37 Yq_k = {"\043(o_O) | -ESC to cancel- Goto line: \000"};
 Zs40 YKlk = {"\046(~____~) | nooooo, i want to teleport!\000"};
@@ -2800,7 +2803,7 @@ Tcpos ZcTbl84899[]={
 };
 Tc Y9QD[]="Main()";
 Tcpos ZcTbl5270[]={
-{957,3},
+{980,3},
 {1,3},
 {2,5},
 {5,3},
@@ -2882,7 +2885,7 @@ Tcpos ZcTbl56087[]={
 };
 Tc Y8aB[]="drawMsgBar()";
 Tcpos ZcTbl86795[]={
-{804,15},
+{827,15},
 {1,6},
 {2,29},
 {3,3},
@@ -2891,7 +2894,7 @@ Tcpos ZcTbl86795[]={
 };
 Tc YCgG[]="drawRows()";
 Tcpos ZcTbl31458[]={
-{737,15},
+{760,15},
 {1,3},
 {2,15},
 {3,5},
@@ -2921,7 +2924,7 @@ Tcpos ZcTbl31458[]={
 };
 Tc Y5xc[]="drawStatusBar()";
 Tcpos ZcTbl25708[]={
-{775,15},
+{798,15},
 {2,138},
 {4,80},
 {5,26},
@@ -3004,7 +3007,7 @@ Tcpos ZcTbl14477[]={
 };
 Tc YQ8H[]="processKeypress()";
 Tcpos ZcTbl40266[]={
-{636,4},
+{640,4},
 {3,5},
 {4,3},
 {5,5},
@@ -3012,48 +3015,62 @@ Tcpos ZcTbl40266[]={
 {7,14},
 {9,7},
 {10,12},
-{13,37},
-{14,13},
-{16,5},
-{18,9},
-{21,9},
-{24,9},
-{27,21},
-{28,9},
-{29,11},
-{31,22},
-{32,9},
-{33,17},
-{35,11},
-{39,9},
-{42,17},
-{44,27},
-{46,9},
-{47,17},
-{53,9},
-{56,9},
-{60,9},
+{12,11},
+{13,20},
+{15,5},
+{16,7},
+{17,7},
+{20,5},
+{21,7},
+{22,14},
+{24,7},
+{25,7},
+{28,11},
+{29,5},
+{30,7},
+{31,14},
+{33,7},
+{36,37},
+{37,13},
+{38,5},
+{40,9},
+{43,9},
+{46,21},
+{47,9},
+{48,11},
+{50,22},
+{51,9},
+{52,17},
+{54,11},
+{58,9},
 {61,17},
-{62,17},
-{63,17},
-{64,11},
-{64,37},
-{66,9},
-{67,22},
-{68,11},
-{66,9},
+{63,27},
+{65,9},
+{66,17},
+{72,9},
 {75,9},
-{78,9},
-{79,11},
-{80,13},
-{79,11},
-{91,9},
-{92,11},
-{94,11},
+{79,9},
+{80,17},
+{81,17},
+{82,17},
+{83,11},
+{83,37},
+{85,9},
+{86,22},
+{87,11},
+{85,9},
+{94,9},
+{97,9},
+{98,11},
+{99,13},
+{98,11},
+{110,9},
+{111,11},
+{113,11},
 };
 Tc Yown[]="prompt()";
 Tcpos ZcTbl87455[]={
-{836,16},
+{859,16},
 {1,3},
 {2,5},
 {3,5},
@@ -3082,7 +3099,7 @@ Tcpos ZcTbl87455[]={
 };
 Tc YRKs[]="readKey()";
 Tcpos ZcTbl79390[]={
-{884,4},
+{907,4},
 {4,4},
 {8,4},
 {11,3},
@@ -3127,7 +3144,7 @@ Tcpos ZcTbl79390[]={
 };
 Tc YClS[]="refreshScreen()";
 Tcpos ZcTbl56800[]={
-{814,3},
+{837,3},
 {2,3},
 {4,15},
 {6,6},
@@ -3158,6 +3175,10 @@ Tcpos ZcTbl72424[]={
 {12,7},
 {13,10},
 };
+Tc Y14F[]="warnUnsaved()";
+Tcpos ZcTbl12051[]={
+{634,3},
+};
 Tcode ZcodeTable[]={
 {0,Ya_D,Yaa,ZcTbl0},
 {412,Y6mX,YxLq,ZcTbl412},
@@ -3172,6 +3193,7 @@ Tcode ZcodeTable[]={
 {9948,Y6mX,YALK,ZcTbl9948},
 {10613,Y6mX,YCbo,ZcTbl10613},
 {11217,Y6mX,YoZS,ZcTbl11217},
+{12051,Ya_D,Y14F,ZcTbl12051},
 {13917,Y6mX,YPGE,ZcTbl13917},
 {14477,Ya_D,YCn_,ZcTbl14477},
 {14715,Y6mX,Y4SL,ZcTbl14715},
@@ -11024,9 +11046,20 @@ Tc *YcnF(Ti Ax, Ti Ay) {
  topFrame = sf.prev;
  return r;
 }
+void YyP1() {
+ Zsf sf;
+ sf.prev = topFrame;
+ sf.pos = 0;
+ topFrame = &sf;
+ sf.pos=1205100;
+ YouM(Vec, ((Tc*)&Yeix), ((Tc*)&Ya));
+ topFrame = sf.prev;
+ return;
+}
 void YLzL() {
  Ti Vc;
  Zsf sf;
+ Tc *Vfname = NULL;
  Ta *Vmovement = NULL;
  Tc *Vto = NULL;
  int rt = 0;
@@ -11045,7 +11078,7 @@ int*c = &Vc;
   if (((Vec->Vfmodified > 0) && (Y1kq > 0)))
   {
    sf.pos=4026604;
-   YouM(Vec, ((Tc*)&Y_b5), ((Tc*)&Ya));
+   YyP1();
    sf.pos=4026605;
    --(Y1kq);
   }
@@ -11054,86 +11087,131 @@ int*c = &Vc;
    sf.pos=4026606;
    YdnK();
    sf.pos=4026607;
-   Zexit(Ypp_a(NULL, ((Tc*)&Ya_Da), 646, 7), 0);
+   Zexit(Ypp_a(NULL, ((Tc*)&Ya_Da), 650, 7), 0);
+  }
+ }
+ else {
+ sf.pos=4026608;
+ if (*c == CTRL_KEY('o'))
+ {
+  sf.pos=4026609;
+  Vfname = Y1GC(((Tc*)&Yq1o), NULL);
+  sf.pos=4026610;
+  if ((Vfname == NULL))
+  {
+   sf.pos=4026611;
+   YouM(Vec, ((Tc*)&Y38M), ((Tc*)&Ya));
+   sf.pos=4026612;
+   rt = 1;
+   goto YhXc;
+  }
+  sf.pos=4026613;
+  if (((Vec->Vfmodified > 0) && (Y1kq > 0)))
+  {
+   sf.pos=4026614;
+   YyP1();
+   sf.pos=4026615;
+   --(Y1kq);
+  }
+  else
+  {
+   sf.pos=4026616;
+   YEDW(Vec);
+   sf.pos=4026617;
+   YaZr(Vec, Vfname);
+  }
+YhXc:
+  if (rt) goto Y5hO;
+ }
+ else {
+ sf.pos=4026618;
+ if (*c == CTRL_KEY('w'))
+ {
+  sf.pos=4026619;
+  if (((Vec->Vfmodified > 0) && (Y1kq > 0)))
+  {
+   sf.pos=4026620;
+   YyP1();
+   sf.pos=4026621;
+   --(Y1kq);
+  }
+  else
+  {
+   sf.pos=4026622;
+   YbQH(Vec);
   }
  }
  else
  {
-  sf.pos=4026608;
+  sf.pos=4026623;
   Vmovement = ZStringToArray(((Tc*)&Yp3l));
-  sf.pos=4026609;
+  sf.pos=4026624;
   Y1kq = 1;
-  sf.pos=4026610;
+  sf.pos=4026625;
   switch (Vc)
   {
-  case CTRL_KEY('w'):
-   {
-    sf.pos=4026611;
-    YbQH(Vec);
-     break;
-   }
   case 13:
    {
-    sf.pos=4026612;
+    sf.pos=4026626;
     YzYj(Vec);
      break;
    }
   case CTRL_KEY('f'):
    {
-    sf.pos=4026613;
+    sf.pos=4026627;
     Yc1O(Vec);
      break;
    }
   case CTRL_KEY('g'):
    {
     Ti Vpos;
-    sf.pos=4026614;
+    sf.pos=4026628;
     Vto = Y1GC(((Tc*)&Yq_k), NULL);
-    sf.pos=4026615;
+    sf.pos=4026629;
     if ((Vto == NULL))
     {
-     sf.pos=4026616;
+     sf.pos=4026630;
      YouM(Vec, ((Tc*)&YKlk), ((Tc*)&Ya));
     }
-    sf.pos=4026617;
+    sf.pos=4026631;
     Vpos = ZstringToInt(Vto, 0, 1);
-    sf.pos=4026618;
+    sf.pos=4026632;
     if ((Vpos <= Vec->Vn_erows))
     {
-     sf.pos=4026619;
+     sf.pos=4026633;
      Vec->Vcy = Vpos;
     }
     else
     {
-     sf.pos=4026620;
+     sf.pos=4026634;
      YouM(Vec, ZcS3(((Tc*)&Ykz0), (((Vpos > (Vec->Vn_erows + 40))) ? (((Tc*)&YSd9)) : (((Tc*)&YU30))), ((Tc*)&YW0q)), ((Tc*)&Ya));
     }
      break;
    }
   case CTRL_KEY('c'):
    {
-    sf.pos=4026621;
+    sf.pos=4026635;
     YouM(Vec, ((Tc*)&YNJx), ((Tc*)&Ya));
      break;
    }
   case '\x1b':
    {
-    sf.pos=4026622;
+    sf.pos=4026636;
     Vec->Vmode = (((Vec->Vmode == 78)) ? (73) : (78));
      break;
    }
   case HOME:
    {
-    sf.pos=4026623;
+    sf.pos=4026637;
     Vec->Vcx = 0;
      break;
    }
   case END:
    {
-    sf.pos=4026624;
+    sf.pos=4026638;
     if (((Vec->Vcy < Vec->Vn_erows)))
     {
-     sf.pos=4026625;
+     sf.pos=4026639;
      Vec->Vcx = ZstringSize(((Ys45 *)ZListGetPtr(Vec->Verows, Vec->Vcy))->Vtxt);
     }
      break;
@@ -11142,51 +11220,51 @@ int*c = &Vc;
   case CTRL_KEY('h'):
   case DEL:
    {
-    sf.pos=4026626;
+    sf.pos=4026640;
     Y7mW(Vec);
      break;
    }
   case CTRL_KEY('s'):
    {
-    sf.pos=4026627;
+    sf.pos=4026641;
     YWKz(Vec);
      break;
    }
   case PAGE_UP:
   case PAGE_DOWN:
    {
-    sf.pos=4026628;
+    sf.pos=4026642;
     if (*c == PAGE_UP)
     {
-     sf.pos=4026629;
+     sf.pos=4026643;
      Vec->Vcy = Vec->Vrowoff;
     }
     else {
-    sf.pos=4026630;
+    sf.pos=4026644;
  if (*c == PAGE_DOWN)
     {
-     sf.pos=4026631;
+     sf.pos=4026645;
      Vec->Vcy = ((Vec->Vrowoff + Vec->Vrows) - 1);
-     sf.pos=4026632;
+     sf.pos=4026646;
      if ((Vec->Vcy > Vec->Vrows))
      {
-      sf.pos=4026633;
+      sf.pos=4026647;
       Vec->Vcy = Vec->Vrows;
      }
     }
     }
-    sf.pos=4026634;
+    sf.pos=4026648;
     {
      Ti Vn;
      Tfr Zf4;
      ZforRangeNew(Vec->Vn_erows, 0, 0, -1, &Zf4);
      for (ZforRangeGetInt(&Zf4, &Vn); ZforRangeContInt(&Zf4); ZforRangeNextInt(&Zf4, &Vn)) {
      Ti Vres;
-     sf.pos=4026635;
+     sf.pos=4026649;
      Vres = *c == PAGE_UP ? UP : DOWN;
-     sf.pos=4026636;
+     sf.pos=4026650;
      Yeai(Vec, Vres);
-     sf.pos=4026637;
+     sf.pos=4026651;
      }
     }
      break;
@@ -11196,24 +11274,24 @@ int*c = &Vc;
   case DOWN:
   case RIGHT:
    {
-    sf.pos=4026638;
+    sf.pos=4026652;
     Yeai(Vec, Vc);
      break;
    }
   case 9:
    {
-    sf.pos=4026639;
+    sf.pos=4026653;
     if (Vec->Vexpand)
     {
-     sf.pos=4026640;
+     sf.pos=4026654;
      {
       Ti Vi;
       Tfr Zf5;
       ZforRangeNew(0, (Vec->Vts - 1), 0, 1, &Zf5);
       for (ZforRangeGetInt(&Zf5, &Vi); ZforRangeContInt(&Zf5); ZforRangeNextInt(&Zf5, &Vi)) {
-      sf.pos=4026641;
+      sf.pos=4026655;
       YcHr(Vec, 32);
-      sf.pos=4026642;
+      sf.pos=4026656;
       }
      }
     }
@@ -11227,24 +11305,26 @@ int*c = &Vc;
    }
   default:
    {
-    sf.pos=4026643;
+    sf.pos=4026657;
     if ((Vec->Vmode == 78))
     {
-     sf.pos=4026644;
+     sf.pos=4026658;
      Yeai(Vec, Vc);
     }
     else
     {
-     sf.pos=4026645;
+     sf.pos=4026659;
      YcHr(Vec, Vc);
     }
      break;
    }
-   if (rt) goto YhXc;
+   if (rt) goto Ym3A;
   }
-YhXc:
+Ym3A:
   ;
  }
+ }}
+Y5hO:
  topFrame = sf.prev;
  return;
 }

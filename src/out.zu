@@ -630,6 +630,10 @@ FUNC gotoxy_s(int x, int y) string
   RETURN tcalls("H", [y.ToString(), x.ToString()])
 }
 
+PROC warnUnsaved()
+  ec.setStatmsg("WAIT! (O__O!) | you have unsaved changes, press CTRL-S to save or try again to quit anyway")
+}
+
 PROC processKeypress()
   STATIC int didquit = 1
   int c 
@@ -639,20 +643,39 @@ int*c = &%c%;
   c = readKey()
   IF C(*c == CTRL_KEY('q'))
     IF ec.fmodified > 0 && didquit > 0
-      ec.setStatmsg("WAIT! (O__O!) | you have unsaved changes! press CTRL-S to save or try again to quit anyway")
+      warnUnsaved()
       didquit--
     ELSE
       clrscr()
       EXIT 0
     }
+  ELSEIF C(*c == CTRL_KEY('o'))
+    string fname = prompt("/>.</ | -ESC to cancel- type a filename: ")
+    
+    IF fname == NIL
+      ec.setStatmsg("@.@ | ok, i get it, no file for me")
+      RETURN
+    }
+
+    IF ec.fmodified > 0 && didquit > 0
+      warnUnsaved()
+      didquit--
+    ELSE
+      ec.reset()
+      ec.open(fname)
+    }
+
+  ELSEIF C(*c == CTRL_KEY('w'))
+    IF ec.fmodified > 0 && didquit > 0
+      warnUnsaved()
+      didquit--
+    ELSE
+      ec.close()
+    }
   ELSE
     array<nat32> movement = "hjlk+".toArray()
     didquit = 1
-
     SWITCH c
-      CASE C(CTRL_KEY('w'))
-        ec.close()
-
       CASE '\r'
         ec.insertNL()
 
