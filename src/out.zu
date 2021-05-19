@@ -17,6 +17,10 @@ PROC die(string s)
   LOG.fatal(s)
 }
 
+FUNC iscntrl(int ch) bool
+  RETURN ch > 127
+}
+
 FUNC tcalls(string f, list<string> args = []) string
   string res = "\x1b["
   IF args.Size() >= 1
@@ -140,7 +144,7 @@ list<EditorSyn> filetypes = [
         [
           "SWITCH", "DO", "FUNC", "WHILE", "IF", "UNTIL", "ELSE", "PROC",
           "CLASS", "RETURN", "FOR", "IN", "TYPE", "ELSEIF", "IMPORT", "BREAK",
-          "CONTINUE", "CASE", "BITS", "}",
+          "CONTINUE", "CASE", "BITS", "}", "PROCEED",
 
           "int|", "string|", "float|", "nat8|", "nat16|", "nat|", "list|",
           "bool|", "array|", "dyn|", "nat32|"
@@ -264,6 +268,7 @@ CLASS Erow
     
     bool psep = TRUE
     int instr = 0
+    bool incmm = FALSE
 
     list<string> kw = $syn.keywords
 
@@ -421,6 +426,7 @@ CLASS EditorConfig
       CASE C(HL_TYPE); RETURN 32
       CASE C(HL_MATCH); RETURN 31
       CASE C(HL_STRING); RETURN 35
+      CASE C(HL_MCOMMENT); PROCEED
       CASE C(HL_COMMENT); RETURN 36
       DEFAULT; RETURN 37
     }
@@ -1070,8 +1076,20 @@ FUNC drawRows() string
 >>>
 int*hlval = &%hlval%;
 <<<
+        int ch = c 
+>>>
+int*ch = &%ch%;
+<<<
         hlval = ec.erows[n].hl[j]
-        IF C(*hlval == HL_NORMAL)
+        IF iscntrl(c)
+          byte sym = C((ch <= 26) ? '@' + ch : '?')
+          ab ..= tcalls("m", ["7"])
+          ab ..= sym.asString()
+          ab ..= tcalls("m")
+          IF ccolor != -1
+            ab ..= tcalls("m", [ccolor.ToString()])
+          }
+        ELSEIF C(*hlval == HL_NORMAL)
           IF ccolor != -1
             ab ..= tcalls("m", ["39"])
             ccolor = -1

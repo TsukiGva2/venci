@@ -11,6 +11,7 @@ enum ehi {
   HL_KEYWORD,
   HL_TYPE,
   HL_COMMENT,
+  HL_MCOMMENT,
   HL_NUMBER,
   HL_MATCH
 };
