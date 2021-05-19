@@ -2,6 +2,14 @@
 
 void disableRawMode();
 
+enum ehi {
+  HL_NORMAL = 0,
+  HL_STRING,
+  HL_COMMENT,
+  HL_NUMBER,
+  HL_MATCH
+};
+
 enum ekey {
   BACKSPACE = 127,
   LEFT = 1000,

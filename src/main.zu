@@ -106,10 +106,18 @@ FUNC cx2rx(Erow r, nat cx, int ts) int
   RETURN rx
 }
 
+FUNC issep(int ch) bool
+  int c @cref
+  c = ch
+  
+  RETURN C(isspace(*c) || strchr(",.()+-/*=~%<>[];\"'", *c) != NULL)
+}
+
 CLASS Erow
   string $txt
   string $orig
   string $render
+  list<nat8> $hl
   int $ts
 
   PROC $updateRow()
@@ -123,6 +131,7 @@ CLASS Erow
         $render ..= i.asString()
       }
     }
+    THIS.updateSyntax()
   }
   
   PROC $insertChar(nat pos, int ch)
@@ -197,10 +206,72 @@ CLASS Erow
     THIS.updateRow()
   }
 
+  PROC $updateSyntax()
+    int j = 0
+
+    $hl = []
+    
+    bool psep = TRUE
+    int instr = 0
+
+    WHILE j < $render.Size()
+      int c = $render[j]
+
+      nat8 phl @cref
+      phl = (j > 0) ? $hl[j - 1] : C(HL_NORMAL).<nat8>
+
+      $hl.add(C(HL_NORMAL).<nat8>)
+      
+      IF instr == 0
+        IF c == '#'
+          $hl[j] = C(HL_COMMENT).<nat8>
+          FOR i IN j + 1 TO $render.Size() - 1
+            $hl.add(C(HL_COMMENT).<nat8>)
+          }
+          BREAK
+        }
+      }
+
+      IF instr != 0
+        $hl[j] = C(HL_STRING).<nat8>
+        IF c == '\\' && j + 1 < $render.Size() - 1
+          $hl.add(C(HL_STRING).<nat8>)
+          j += 2
+          CONTINUE
+        }
+        IF c == instr
+          instr = 0
+        }
+        j++
+        psep = TRUE
+        CONTINUE
+      ELSE
+        IF (c == '"' || c == '\'')
+          instr = c
+          $hl[j] = C(HL_STRING).<nat8>
+          j++
+          CONTINUE
+        }
+      }
+
+      IF c.isDigit() && (psep || C(*phl == HL_NUMBER))
+        || (c == '.' && C(*phl == HL_NUMBER))
+        $hl[j] = C(HL_NUMBER).<nat8>
+        j++
+        psep = FALSE
+        CONTINUE
+      }
+
+      psep = issep(c)
+      j++
+    }
+  }
+
   NEW(string text, int ts)
     $txt = text
     $ts = ts
     $orig = text
+    $hl = []
     $render = ""
   }
 }
@@ -228,8 +299,30 @@ CLASS EditorConfig
     $statime = TIME.current()
   }
 
+  FUNC $getSynColor(int hl) int
+    SWITCH hl
+      CASE C(HL_NUMBER); RETURN 32
+      CASE C(HL_MATCH); RETURN 31
+      CASE C(HL_STRING); RETURN 35
+      CASE C(HL_COMMENT); RETURN 36
+      DEFAULT; RETURN 37
+    }
+  }
+
   PROC $find()
+    int scx = $cx
+    int scy = $cy
+    int scoloff = $coloff
+    int srowoff = $rowoff
+
     string query = prompt("(=_=) | -ESC to cancel- Find text: ", findCb)
+
+    IF query == NIL
+      $cx = scx
+      $cy = scy
+      $coloff = scoloff
+      $rowoff = srowoff
+    }
   }
   
   FUNC $rowsToStr() string
@@ -514,6 +607,12 @@ CLASS EditorConfig
         FOR c IN t
           THIS.insertChar(c)
         }
+      CASE 'A'
+        IF r != NIL
+          $cx = r.txt.Size()
+        }
+      CASE 'I'
+        $cx = 0
     }
 
     Erow r2 = ($cy >= $n_erows) ? NIL : $erows[$cy]
@@ -543,7 +642,7 @@ CLASS EditorConfig
     $rowoff = 0
     $coloff = 0
     $erows = []
-    $mode = C('I')
+    $mode = C('N')
     $ts = 2
     $statusmsg = ""
     $statime = 0
@@ -567,23 +666,77 @@ CLASS EditorConfig
 EditorConfig ec = NEW()
 
 PROC findCb(string query, int k)
-  IF k == '\x1b'
-    ec.setStatmsg("('.') | i was trying to find something, but you just canceled the thing.")
-    RETURN
+  STATIC int last = -1
+  STATIC int dir  = 1
+
+  STATIC int shl_index = 0
+  STATIC list<nat8> shl = NIL
+
+  IF shl != NIL
+    ec.erows[shl_index].hl = shl
+    shl = NIL
   }
+
+  int key @cref
+  key = k
+
+  IF k == '\x1b'
+    ec.setStatmsg("('.') | i was trying to find something, but you just canceled the search.")
+    last = -1
+    dir = 1
+    RETURN
+  ELSEIF C(*key == RIGHT || *key == DOWN)
+    dir = 1
+  ELSEIF C(*key == LEFT || *key == UP)
+    dir = -1
+  ELSEIF C(*key == '\r')
+    IF last == -1
+      ec.setStatmsg("(^_-) | didn't find string \(query)")
+      dir = 1
+      RETURN
+    ELSE
+      ec.setStatmsg("(^O^) | Yay! i found it!")
+      last = -1
+      dir = 1
+      RETURN
+    }
+  ELSE
+    last = -1
+    dir = 1
+  }
+
+  IF last == -1
+    dir = 1
+  }
+
+  int current = last
   
   FOR i IN 0 TO ec.n_erows - 1
-    Erow r = ec.erows[i]
+    current += dir
+    IF current == -1
+      current = ec.n_erows - 1
+    ELSEIF current == ec.n_erows
+      current = 0
+    }
+
+    Erow r = ec.erows[current]
     int match = r.render.find(query)
     
     IF match != -1
-      ec.cy = i
+      last = current
+      ec.cy = current
       ec.cx = r.rx2cx(match)
       ec.rowoff = ec.n_erows
-      ec.setStatmsg("(^O^) | Yay! i found it!")
+
+      shl_index = current
+      shl = r.hl.copy()
+
+      FOR j IN ec.cx TO ec.cx + (query.Size() - 1)
+        IF j < r.hl.Size()
+          r.hl[j] = C(HL_MATCH).<nat8>
+        }
+      }
       BREAK
-    ELSEIF i == ec.n_erows - 1
-      ec.setStatmsg("(^_-) | didn't find string \(query)")
     }
   }
 }
@@ -782,7 +935,29 @@ FUNC drawRows() string
       IF len >= ec.cols
         len = ec.cols - 1
       }
-      ab ..= ec.erows[n].render.slice(ec.coloff, ec.coloff + len)
+
+      int j = 0
+      int ccolor = -1
+      FOR c IN ec.erows[n].render.slice(ec.coloff, ec.coloff + len)
+        int hlval @cref
+        hlval = ec.erows[n].hl[j]
+        IF C(*hlval == HL_NORMAL)
+          IF ccolor != -1
+            ab ..= tcalls("m", ["39"])
+            ccolor = -1
+          }
+          ab ..= c.asString()
+        ELSE
+          int color = ec.getSynColor(hlval)
+          IF color != ccolor
+            ccolor = color
+            ab ..= tcalls("m", [color.ToString()])
+          }
+          ab ..= c.asString()
+        }
+        j++
+      }
+      ab ..= tcalls("m", ["39"])
     }
 
     ab ..= "\x1b[K"
@@ -796,7 +971,7 @@ FUNC drawStatusBar() string
   
   string barText = " \(ec.filename == NIL ? "[No Name]" : ec.filename.slice(0, 20))\(ec.fmodified > 0 ? "*" : "") - \(ec.n_erows) lines".slice(0, ec.cols - 1)
   
-  string statText = "<\(ec.mode.asString())> LINE:\(ec.cy + 1)/\(ec.n_erows + 1) | COLUM:\(ec.cx + 1)"
+  string statText = "<\(ec.mode.asString())> LINE:\(ec.cy + 1)/\(ec.n_erows + 1) | COLUMN:\(ec.cx + 1)"
   int statlen = statText.Size()
 
   string welcome = " welcome to venci (^_^)/ |"
