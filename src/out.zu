@@ -120,20 +120,33 @@ CLASS EditorSyn
   string $ft
   list<string> $fpatterns
   string $icommentStyle
+  list<string> $keywords
   int $flags
 
-  NEW(string ft, list<string> fp, int flags, string ics)
+  NEW(string ft, list<string> fp, int flags, string ics, list<string> kw)
     $ft = ft
     $fpatterns = fp
     $flags = flags
     $icommentStyle = ics
+    $keywords = kw
   }
 }
 
 
 # add filetypes here
-list<EditorSyn> filetypes = [NEW("zimbu", [".zu"],
-   C(HI_NUM | HI_STRING).<int>, "#")]
+list<EditorSyn> filetypes = [
+    NEW("zimbu", [".zu"],
+        C(HI_NUM | HI_STRING).<int>, "#",
+        [
+          "SWITCH", "DO", "FUNC", "WHILE", "IF", "UNTIL", "ELSE", "PROC",
+          "CLASS", "RETURN", "FOR", "IN", "TYPE", "ELSEIF", "IMPORT", "BREAK",
+          "CONTINUE", "CASE", "BITS", "}",
+
+          "int|", "string|", "float|", "nat8|", "nat16|", "nat|", "list|",
+          "bool|", "array|", "dyn|", "nat32|"
+        ]
+    )
+  ]
 
 
 FUNC next(string s, int from, int len) string
@@ -252,6 +265,8 @@ CLASS Erow
     bool psep = TRUE
     int instr = 0
 
+    list<string> kw = $syn.keywords
+
     WHILE j < $render.Size()
       int c = $render[j]
 
@@ -302,6 +317,35 @@ uint8_t*phl = &%phl%;
           || (c == '.' && C(*phl == HL_NUMBER))
           $hl[j] = C(HL_NUMBER).<nat8>
           j++
+          psep = FALSE
+          CONTINUE
+        }
+      }
+
+      IF psep
+        bool broken = FALSE
+        FOR keyw IN kw
+          # bool|
+          string k = keyw
+          int len = k.Size() - 1
+          bool k2 = k.endsWith("|")
+          IF k2
+            len--
+            k = k.slice(0, len)
+          }
+          IF next($render, j, len) == k
+              && (j + len >= $render.Size() - 1 || issep($render[j + len + 1]))
+            nat8 hi = k2 ? C(HL_TYPE).<nat8> : C(HL_KEYWORD).<nat8>
+            $hl[j] = hi
+            FOR o IN j + 1 TO j + len
+              $hl.add(hi)
+            }
+            j += len + 1
+            broken = TRUE
+            BREAK
+          }
+        }
+        IF broken
           psep = FALSE
           CONTINUE
         }
