@@ -116,12 +116,37 @@ int*c = &%c%;
   RETURN C(isspace(*c) || strchr(",.()+-/*=~%<>[];\"'", *c) != NULL)
 }
 
+CLASS EditorSyn
+  string $ft
+  list<string> $fpatterns
+  string $icommentStyle
+  int $flags
+
+  NEW(string ft, list<string> fp, int flags, string ics)
+    $ft = ft
+    $fpatterns = fp
+    $flags = flags
+    $icommentStyle = ics
+  }
+}
+
+
+# add filetypes here
+list<EditorSyn> filetypes = [NEW("zimbu", [".zu"],
+   C(HI_NUM | HI_STRING).<int>, "#")]
+
+
+FUNC next(string s, int from, int len) string
+  RETURN s.slice(from, from + len)
+}
+
 CLASS Erow
   string $txt
   string $orig
   string $render
   list<nat8> $hl
   int $ts
+  EditorSyn $syn
 
   PROC $updateRow()
     $render = ""
@@ -210,7 +235,17 @@ CLASS Erow
   }
 
   PROC $updateSyntax()
+    IF $syn == NIL
+      $hl = []
+      FOR j IN 0 TO $render.Size() - 1
+        $hl.add(C(HL_NORMAL).<nat8>)
+      }
+      RETURN
+    }
+
     int j = 0
+
+    string ics = $syn.icommentStyle
 
     $hl = []
     
@@ -228,8 +263,8 @@ uint8_t*phl = &%phl%;
 
       $hl.add(C(HL_NORMAL).<nat8>)
       
-      IF instr == 0
-        IF c == '#'
+      IF ics.Size() > 0 && instr == 0
+        IF next($render, j, ics.Size() - 1) == ics
           $hl[j] = C(HL_COMMENT).<nat8>
           FOR i IN j + 1 TO $render.Size() - 1
             $hl.add(C(HL_COMMENT).<nat8>)
@@ -238,34 +273,38 @@ uint8_t*phl = &%phl%;
         }
       }
 
-      IF instr != 0
-        $hl[j] = C(HL_STRING).<nat8>
-        IF c == '\\' && j + 1 < $render.Size() - 1
-          $hl.add(C(HL_STRING).<nat8>)
-          j += 2
-          CONTINUE
-        }
-        IF c == instr
-          instr = 0
-        }
-        j++
-        psep = TRUE
-        CONTINUE
-      ELSE
-        IF (c == '"' || c == '\'')
-          instr = c
+      IF $syn.flags & C(HI_STRING) != 0
+        IF instr != 0
           $hl[j] = C(HL_STRING).<nat8>
+          IF c == '\\' && j + 1 < $render.Size() - 1
+            $hl.add(C(HL_STRING).<nat8>)
+            j += 2
+            CONTINUE
+          }
+          IF c == instr
+            instr = 0
+          }
           j++
+          psep = TRUE
           CONTINUE
+        ELSE
+          IF (c == '"' || c == '\'')
+            instr = c
+            $hl[j] = C(HL_STRING).<nat8>
+            j++
+            CONTINUE
+          }
         }
       }
 
-      IF c.isDigit() && (psep || C(*phl == HL_NUMBER))
-        || (c == '.' && C(*phl == HL_NUMBER))
-        $hl[j] = C(HL_NUMBER).<nat8>
-        j++
-        psep = FALSE
-        CONTINUE
+      IF $syn.flags & C(HI_NUM) != 0
+        IF c.isDigit() && (psep || C(*phl == HL_NUMBER))
+          || (c == '.' && C(*phl == HL_NUMBER))
+          $hl[j] = C(HL_NUMBER).<nat8>
+          j++
+          psep = FALSE
+          CONTINUE
+        }
       }
 
       psep = issep(c)
@@ -273,12 +312,13 @@ uint8_t*phl = &%phl%;
     }
   }
 
-  NEW(string text, int ts)
+  NEW(string text, int ts, EditorSyn syn)
     $txt = text
     $ts = ts
     $orig = text
     $hl = []
     $render = ""
+    $syn = syn
   }
 }
 
@@ -298,6 +338,7 @@ CLASS EditorConfig
   string $filename
   string $statusmsg
   Time_t $statime
+  EditorSyn $csyn
   C(struct termios*) $orig_termios
 
   PROC $setStatmsg(string s, string b = "")
@@ -305,9 +346,35 @@ CLASS EditorConfig
     $statime = TIME.current()
   }
 
+  PROC $updateSynAllRows()
+    FOR r IN $erows
+      r.syn = $csyn
+      r.updateSyntax()
+    }
+  }
+
+  PROC $selectSyn()
+    $csyn = NIL
+    IF $filename == NIL
+      RETURN
+    }
+   
+    FOR entry IN filetypes
+      FOR fp IN entry.fpatterns
+        IF $filename.endsWith(fp)
+          $csyn = entry
+          THIS.updateSynAllRows()
+          RETURN
+        }
+      }
+    }
+  }
+
   FUNC $getSynColor(int hl) int
     SWITCH hl
-      CASE C(HL_NUMBER); RETURN 32
+      CASE C(HL_NUMBER); RETURN 34
+      CASE C(HL_KEYWORD); RETURN 33
+      CASE C(HL_TYPE); RETURN 32
       CASE C(HL_MATCH); RETURN 31
       CASE C(HL_STRING); RETURN 35
       CASE C(HL_COMMENT); RETURN 36
@@ -356,8 +423,8 @@ CLASS EditorConfig
           FOR j IN 0 TO $n_erows - 1
             $erows[j].orig = $erows[j].txt
           }
-          THIS.setStatmsg("(\\^w^/) | \(w.Size()) bytes written")
           $fmodified = 0
+          THIS.setStatmsg("(\\^w^/) | \(w.Size()) bytes written")
         }
       }
     ELSE
@@ -368,6 +435,7 @@ CLASS EditorConfig
         THIS.save()
       }
     }
+    THIS.selectSyn()
   }
 
   PROC $scroll()
@@ -395,7 +463,7 @@ CLASS EditorConfig
 
   PROC $insertRow(string s, int at = $n_erows)
     IF (at >= 0 && at <= $n_erows)
-      Erow r = NEW(s, $ts)
+      Erow r = NEW(s, $ts, $csyn)
 
       r.updateRow()
 
@@ -473,6 +541,7 @@ CLASS EditorConfig
           THIS.insertRow(line)
         }
         $fmodified = 0
+        THIS.selectSyn()
         f.close()
       }
     }
@@ -653,12 +722,14 @@ CLASS EditorConfig
     $statusmsg = ""
     $statime = 0
     $n_erows = 0
+    $filename = NIL
     $fmodified = 0
     $rx = 0
     $expand = TRUE
     $copy = NIL
     $cx = 0
     $cy = 0
+    $csyn = NIL
   }
 
   NEW()
@@ -986,10 +1057,10 @@ FUNC drawStatusBar() string
   
   string barText = " \(ec.filename == NIL ? "[No Name]" : ec.filename.slice(0, 20))\(ec.fmodified > 0 ? "*" : "") - \(ec.n_erows) lines".slice(0, ec.cols - 1)
   
-  string statText = "<\(ec.mode.asString())> LINE:\(ec.cy + 1)/\(ec.n_erows + 1) | COLUMN:\(ec.cx + 1)"
+  string statText = "<\(ec.mode.asString())> ft: \(ec.csyn != NIL ? ec.csyn.ft : "none") LINE:\(ec.cy + 1)/\(ec.n_erows + 1) | COLUMN:\(ec.cx + 1)"
   int statlen = statText.Size()
 
-  string welcome = " welcome to venci (^_^)/ |"
+  string welcome = " (^_^)/ |"
   IF barText.Size() + welcome.Size() < ec.cols - statlen
     barText = welcome .. barText
   }
@@ -1014,7 +1085,7 @@ FUNC drawMsgBar() string
   string ab = ""
   ab ..= tcalls("K")
   int msglen = ec.statusmsg.Size()
-  IF msglen > 0 && TIME.current() - ec.statime < 5000
+  IF msglen > 0 && TIME.current() - ec.statime < 500000
     ab ..= ec.statusmsg
   }
   RETURN ab
